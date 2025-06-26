@@ -9,6 +9,8 @@ from products.filters import ProductFilter
 import numpy as np
 from django.db.models import Count
 import json
+from rest_framework.decorators import api_view
+from .parser import WildberriesParser
 
 class ProductListView(generics.ListAPIView):
     queryset = Product.objects.all()
@@ -66,3 +68,25 @@ class BrandsView(APIView):
                                .annotate(count=Count('brand'))\
                                .order_by('-count')
         return Response([b['brand'] for b in brands])
+    
+@api_view(['POST'])
+def parse_products(request):
+    search_query = request.data.get('query', '').strip()
+    if not search_query:
+        return Response({'error': 'Не указан поисковый запрос'}, status=400)
+    
+    try:
+        # Парсим 2 страницы (можно изменить)
+        products_data = WildberriesParser.parse_search(search_query, pages=2)
+        created_count = WildberriesParser.save_to_db(products_data)
+        
+        return Response({
+            'status': 'success',
+            'count': created_count,
+            'query': search_query
+        })
+    except Exception as e:
+        return Response({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
